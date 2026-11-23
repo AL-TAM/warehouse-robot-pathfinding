@@ -1,0 +1,206 @@
+{
+  "name": "Warehouse Robot Pathfinding (BFS)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "8e91911b-2be0-40c7-9dec-148a953dcde9",
+      "name": "Start Pathfinding Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = 4;\nconst cols = 4;\nconst start = { row: 0, col: 0 };\nconst goal = { row: 3, col: 3 };\nconst obstacles = [{ row: 1, col: 1 }, { row: 1, col: 2 }];\n\n// Movement order: Right, Down, Left, Up (no diagonals), step cost 1\nconst moves = [\n  { name: 'Right', dr: 0, dc: 1 },\n  { name: 'Down', dr: 1, dc: 0 },\n  { name: 'Left', dr: 0, dc: -1 },\n  { name: 'Up', dr: -1, dc: 0 },\n];\nconst stepCost = 1;\n\nconst grid = [];\nfor (let r = 0; r < rows; r++) {\n  const line = [];\n  for (let c = 0; c < cols; c++) {\n    const isObstacle = obstacles.some(function (o) { return o.row === r && o.col === c; });\n    line.push(isObstacle ? 1 : 0);\n  }\n  grid.push(line);\n}\n\nreturn [{ json: { rows, cols, start, goal, obstacles, moves, stepCost, grid } }];"
+      },
+      "id": "ac3c44bd-810d-4883-9cd8-1e090cb64d28",
+      "name": "Generate Warehouse Grid",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst errors = [];\n\nfunction inside(p) {\n  return Number.isInteger(p.row) && Number.isInteger(p.col) &&\n    p.row >= 0 && p.row < d.rows && p.col >= 0 && p.col < d.cols;\n}\nfunction isObstacle(p) {\n  return d.obstacles.some(function (o) { return o.row === p.row && o.col === p.col; });\n}\n\nif (!inside(d.start)) errors.push('Start is outside the grid');\nif (!inside(d.goal)) errors.push('Goal is outside the grid');\nd.obstacles.forEach(function (o) {\n  if (!inside(o)) errors.push('Obstacle (' + o.row + ',' + o.col + ') is outside the grid');\n});\nif (isObstacle(d.start)) errors.push('Start is on an obstacle');\nif (isObstacle(d.goal)) errors.push('Goal is on an obstacle');\n\nconst validation = errors.length === 0 ? 'passed' : 'failed';\nreturn [{ json: Object.assign({}, d, { validation: validation, validationErrors: errors }) }];"
+      },
+      "id": "8f794f3f-56eb-4a98-860e-6c4254247b3b",
+      "name": "Validate Grid Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\n\nif (d.validation !== 'passed') {\n  return [{ json: Object.assign({}, d, {\n    pathFound: false,\n    expandedNodes: [],\n    path: [],\n    message: 'Validation failed: ' + d.validationErrors.join('; '),\n  }) }];\n}\n\nconst key = function (r, c) { return r + ',' + c; };\nconst blocked = {};\nd.obstacles.forEach(function (o) { blocked[key(o.row, o.col)] = true; });\n\nconst queue = [{ row: d.start.row, col: d.start.col }]; // FIFO: push to back, shift from front\nconst visited = {};\nvisited[key(d.start.row, d.start.col)] = true; // mark visited when enqueued\nconst parent = {};\nparent[key(d.start.row, d.start.col)] = null;\nconst expandedNodes = [];\nlet reached = false;\n\nwhile (queue.length > 0) {\n  const cur = queue.shift();\n  expandedNodes.push([cur.row, cur.col]); // expanded when removed from queue\n  if (cur.row === d.goal.row && cur.col === d.goal.col) {\n    reached = true;\n    break;\n  }\n  for (let i = 0; i < d.moves.length; i++) {\n    const m = d.moves[i];\n    const nr = cur.row + m.dr;\n    const nc = cur.col + m.dc;\n    if (nr < 0 || nr >= d.rows || nc < 0 || nc >= d.cols) continue; // out of grid\n    if (blocked[key(nr, nc)]) continue; // obstacle\n    if (visited[key(nr, nc)]) continue; // already visited\n    visited[key(nr, nc)] = true;\n    parent[key(nr, nc)] = { row: cur.row, col: cur.col };\n    queue.push({ row: nr, col: nc });\n  }\n}\n\nlet path = [];\nif (reached) {\n  let node = { row: d.goal.row, col: d.goal.col };\n  while (node) {\n    path.push([node.row, node.col]);\n    node = parent[key(node.row, node.col)];\n  }\n  path.reverse();\n}\n\nreturn [{ json: Object.assign({}, d, {\n  pathFound: reached,\n  expandedNodes: expandedNodes,\n  path: path,\n  message: reached ? 'Goal reached' : 'Goal is unreachable',\n}) }];"
+      },
+      "id": "ea744b7c-5b17-4129-acf2-90d6b8cfec2b",
+      "name": "Run BFS Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "path-found",
+              "leftValue": "={{ $json.pathFound }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a4c5326b-b7f4-48ad-8fb6-c353c26504d6",
+      "name": "Path Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst path = d.path;\nconst totalCost = (path.length - 1) * d.stepCost;\n\nfunction isObstacle(r, c) {\n  return d.obstacles.some(function (o) { return o.row === r && o.col === c; });\n}\n\nconst startsAtStart = path[0][0] === d.start.row && path[0][1] === d.start.col;\nconst endsAtGoal = path[path.length - 1][0] === d.goal.row && path[path.length - 1][1] === d.goal.col;\nlet avoidsObstacles = true;\nlet oneStepMoves = true;\nfor (let i = 0; i < path.length; i++) {\n  if (isObstacle(path[i][0], path[i][1])) avoidsObstacles = false;\n  if (i > 0) {\n    const dist = Math.abs(path[i][0] - path[i - 1][0]) + Math.abs(path[i][1] - path[i - 1][1]);\n    if (dist !== 1) oneStepMoves = false;\n  }\n}\nconst pathCheck = {\n  startsAtStart: startsAtStart,\n  endsAtGoal: endsAtGoal,\n  avoidsObstacles: avoidsObstacles,\n  movesOneStepAtATime: oneStepMoves,\n  allPassed: startsAtStart && endsAtGoal && avoidsObstacles && oneStepMoves,\n};\n\n// Emoji grid\nconst onPath = {};\npath.forEach(function (p) { onPath[p[0] + ',' + p[1]] = true; });\nconst lines = [];\nfor (let r = 0; r < d.rows; r++) {\n  let line = '';\n  for (let c = 0; c < d.cols; c++) {\n    if (r === d.start.row && c === d.start.col) line += '🤖';\n    else if (r === d.goal.row && c === d.goal.col) line += '🏁';\n    else if (isObstacle(r, c)) line += '⬛';\n    else if (onPath[r + ',' + c]) line += '🟩';\n    else line += '⬜';\n  }\n  lines.push(line);\n}\n\nfunction fmt(list) {\n  return list.map(function (p) { return '(' + p[0] + ',' + p[1] + ')'; }).join(' -> ');\n}\n\nreturn [{ json: {\n  branch: 'Path found',\n  validation: d.validation,\n  expandedNodes: d.expandedNodes,\n  expandedNodesText: fmt(d.expandedNodes),\n  finalPath: path,\n  finalPathText: fmt(path),\n  totalCost: totalCost,\n  pathCheck: pathCheck,\n  visualGrid: lines.join('\\n'),\n  visualGridRows: lines,\n} }];"
+      },
+      "id": "8568755d-4206-4c38-8d2b-0af8bd6baf14",
+      "name": "Record Path Found",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "branch",
+              "name": "branch",
+              "type": "string",
+              "value": "No path"
+            },
+            {
+              "id": "message",
+              "name": "message",
+              "type": "string",
+              "value": "={{ $json.message }}"
+            },
+            {
+              "id": "expanded",
+              "name": "expandedNodes",
+              "type": "array",
+              "value": "={{ $json.expandedNodes }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a4e09786-dc61-4d3f-a4ca-a2bacbfb87d3",
+      "name": "Record No Path",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        192
+      ]
+    }
+  ],
+  "connections": {
+    "Start Pathfinding Run": {
+      "main": [
+        [
+          {
+            "node": "Generate Warehouse Grid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Warehouse Grid": {
+      "main": [
+        [
+          {
+            "node": "Validate Grid Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Grid Input": {
+      "main": [
+        [
+          {
+            "node": "Run BFS Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run BFS Search": {
+      "main": [
+        [
+          {
+            "node": "Path Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Path Found?": {
+      "main": [
+        [
+          {
+            "node": "Record Path Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record No Path",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}
