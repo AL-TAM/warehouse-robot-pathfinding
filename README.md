@@ -2,8 +2,6 @@
 
 A robot starts in one corner of a warehouse and needs to reach the opposite corner. Two shelves block the middle aisle. This AI course project uses breadth-first search (BFS) in an n8n workflow to find a shortest route around them.
 
-**[Watch the narrated walkthrough](https://al-tam.github.io/warehouse-robot-pathfinding/)** to see which squares the search checks, which route the robot takes, and what happens when both exits from the start are blocked.
-
 ## Run it in n8n
 
 1. Download [workflow.json](workflow.json) using GitHub’s **Download raw file** button.
@@ -21,5 +19,3 @@ BFS checks squares in order of distance from the start. Each time it discovers a
 ## Try blocking the start
 
 In **Generate Warehouse Grid**, add `{ row: 0, col: 1 }` and `{ row: 1, col: 0 }` to the obstacle list. Run the workflow again and open **Record No Path**. The robot checks only its starting square and returns **Goal is unreachable**. Putting a shelf directly on the start instead produces an input validation message before the search begins.
-
-The walkthrough animates the expansion order and route returned by the workflow’s JavaScript nodes for these example maps.
